@@ -29,15 +29,10 @@
         </header>
 
         <div class="bg-white p-6 rounded-xl shadow-md mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="backendUrl" class="block text-sm font-medium text-gray-700 mb-1">Backend Base URL</label>
-                    <input type="url" id="backendUrl" placeholder="https://dit-projekt.vercel.app" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                </div>
-                 <div>
-                    <label for="apiKey" class="block text-sm font-medium text-gray-700 mb-1">API Nøgle</label>
-                    <input type="password" id="apiKey" placeholder="Din hemmelige nøgle" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                </div>
+            <div class="mb-4">
+                <label for="apiKey" class="block text-sm font-medium text-gray-700 mb-1">API Nøgle</label>
+                <input type="password" id="apiKey" placeholder="Indtast din hemmelige nøgle én gang" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <p class="text-xs text-gray-500 mt-1">Din nøgle gemmes sikkert i browseren til næste gang.</p>
             </div>
             <div class="mt-4">
                 <label for="urlInput" class="block text-sm font-medium text-gray-700 mb-1">Start URL til Scraping</label>
@@ -73,7 +68,6 @@
 
     <script>
         // --- UI Elements ---
-        const backendUrlInput = document.getElementById('backendUrl');
         const apiKeyInput = document.getElementById('apiKey');
         const urlInput = document.getElementById('urlInput');
         const linkFilterInput = document.getElementById('linkFilterInput');
@@ -87,22 +81,23 @@
         const downloadTxtBtn = document.getElementById('downloadTxtBtn');
 
         let pollingInterval;
+        
+        // --- Smart Configuration ---
+        // Backend URL is now determined automatically from the current page's location.
+        const backendUrl = window.location.origin;
 
-        // --- Local Storage for settings ---
-        backendUrlInput.value = localStorage.getItem('scraperBackendUrl') || '';
+        // Load API key from local storage
         apiKeyInput.value = localStorage.getItem('scraperApiKey') || '';
-        backendUrlInput.addEventListener('change', () => localStorage.setItem('scraperBackendUrl', backendUrlInput.value));
         apiKeyInput.addEventListener('change', () => localStorage.setItem('scraperApiKey', apiKeyInput.value));
 
         // --- Main Logic ---
         scrapeBtn.addEventListener('click', async () => {
-            const backendUrl = backendUrlInput.value.trim();
             const apiKey = apiKeyInput.value.trim();
             const targetUrl = urlInput.value.trim();
             const linkFilter = linkFilterInput.value.trim();
 
-            if (!backendUrl || !apiKey || !targetUrl) {
-                showStatus('Udfyld venligst Backend URL, API Nøgle og Start URL.', 'error');
+            if (!apiKey || !targetUrl) {
+                showStatus('Udfyld venligst API Nøgle og Start URL.', 'error');
                 return;
             }
 
@@ -137,7 +132,6 @@
             if (pollingInterval) clearInterval(pollingInterval);
 
             pollingInterval = setInterval(async () => {
-                const backendUrl = backendUrlInput.value.trim();
                 const apiKey = apiKeyInput.value.trim();
                 
                 try {
@@ -220,5 +214,3 @@
     </script>
 </body>
 </html>
-
-
