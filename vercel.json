@@ -10,6 +10,11 @@
       "use": "@vercel/static"
     }
   ],
+  "functions": {
+    "api/process-job.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
