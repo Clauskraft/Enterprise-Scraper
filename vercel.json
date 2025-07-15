@@ -1,15 +1,14 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
   "functions": {
-    "api/start-job.js": {
-      "runtime": "nodejs18.x"
-    },
     "api/process-job.js": {
-      "runtime": "nodejs18.x",
       "maxDuration": 300
-    },
-    "api/job-status.js": {
-      "runtime": "nodejs18.x"
     }
   },
   "rewrites": [
