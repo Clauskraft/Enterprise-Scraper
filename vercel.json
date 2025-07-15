@@ -6,11 +6,6 @@
       "use": "@vercel/node"
     }
   ],
-  "functions": {
-    "api/process-job.js": {
-      "maxDuration": 300
-    }
-  },
   "rewrites": [
     {
       "source": "/(.*)",
