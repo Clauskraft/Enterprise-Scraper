@@ -1,216 +1,53 @@
-<!DOCTYPE html>
-<html lang="da">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Scraper</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .is-loading::after {
-            content: ''; display: inline-block; width: 1rem; height: 1rem;
-            margin-left: 0.5rem; border: 2px solid transparent;
-            border-top-color: white; border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .progress-bar-container { background-color: #e5e7eb; border-radius: 9999px; overflow: hidden; }
-        .progress-bar { background-color: #2563eb; height: 100%; transition: width 0.3s ease-in-out; }
-    </style>
-</head>
-<body class="bg-gray-100 text-gray-800">
+// api/start-job.js
 
-    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-3xl">
-        
-        <header class="text-center mb-6">
-            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Enterprise Scraper</h1>
-            <p class="text-gray-600 mt-2">Asynkron, sikker og skalerbar</p>
-        </header>
+export default async function handler(req, res) {
+  // Sæt CORS-headers for at tillade anmodninger fra alle oprindelser.
+  // Dette er vigtigt for API'er, der kaldes fra en browser.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-        <div class="bg-white p-6 rounded-xl shadow-md mb-6">
-            <div class="mb-4">
-                <label for="apiKey" class="block text-sm font-medium text-gray-700 mb-1">API Nøgle</label>
-                <input type="password" id="apiKey" placeholder="Indtast din hemmelige nøgle én gang" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <p class="text-xs text-gray-500 mt-1">Din nøgle gemmes sikkert i browseren til næste gang.</p>
-            </div>
-            <div class="mt-4">
-                <label for="urlInput" class="block text-sm font-medium text-gray-700 mb-1">Start URL til Scraping</label>
-                <input type="url" id="urlInput" placeholder="https://www.ft.dk/da/search?q=..." class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div class="mt-4">
-                <label for="linkFilterInput" class="block text-sm font-medium text-gray-700 mb-1">Filter (følg kun links, der indeholder...)</label>
-                <input type="text" id="linkFilterInput" value="/samling/" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div class="mt-6">
-                <button id="scrapeBtn" class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition">
-                    Start Asynkront Job
-                </button>
-            </div>
-        </div>
+  // Vercel håndterer automatisk OPTIONS-anmodninger, men det er god praksis at have det med.
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-        <div id="statusContainer" class="hidden">
-            <div id="status" class="text-center my-2 font-medium"></div>
-            <div class="progress-bar-container w-full h-2.5 my-2">
-                <div id="progressBar" class="progress-bar" style="width: 0%"></div>
-            </div>
-        </div>
+  // Sørg for, at vi kun accepterer POST-anmodninger.
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+  }
 
-        <div id="resultContainer" class="bg-white p-6 rounded-xl shadow-md hidden">
-            <h2 class="text-2xl font-bold mb-4 text-gray-900">Samlet Resultat</h2>
-            <div id="contentDisplay" class="w-full h-96 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-y-auto text-sm text-gray-700"></div>
-            <div class="flex flex-wrap gap-4 mt-4">
-                <button id="copyBtn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition">Kopier Tekst</button>
-                <button id="downloadTxtBtn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition">Download som .txt</button>
-            </div>
-        </div>
-    </div>
+  // Brug en try...catch-blok til at fange alle fejl.
+  try {
+    // 1. Hent data fra anmodningens krop (body).
+    const { startUrl, filter, apiKey } = req.body;
 
-    <script>
-        // --- UI Elements ---
-        const apiKeyInput = document.getElementById('apiKey');
-        const urlInput = document.getElementById('urlInput');
-        const linkFilterInput = document.getElementById('linkFilterInput');
-        const scrapeBtn = document.getElementById('scrapeBtn');
-        const statusContainer = document.getElementById('statusContainer');
-        const statusDiv = document.getElementById('status');
-        const progressBar = document.getElementById('progressBar');
-        const resultContainer = document.getElementById('resultContainer');
-        const contentDisplay = document.getElementById('contentDisplay');
-        const copyBtn = document.getElementById('copyBtn');
-        const downloadTxtBtn = document.getElementById('downloadTxtBtn');
+    // Simpel validering for at sikre, at de nødvendige data er til stede.
+    if (!startUrl || !filter || !apiKey) {
+      return res.status(400).json({ error: 'Mangler påkrævede parametre: startUrl, filter, eller apiKey' });
+    }
 
-        let pollingInterval;
-        
-        // --- Smart Configuration ---
-        // Backend URL is now determined automatically from the current page's location.
-        const backendUrl = window.location.origin;
+    // --- Her ville din logik til at starte det faktiske job være ---
+    // F.eks. et kald til en ekstern service, en database-opdatering osv.
+    // For nu simulerer vi, at et job startes, og genererer et unikt job-ID.
+    console.log(`Starter job med URL: ${startUrl} og filter: ${filter}`);
+    const jobId = `job_${Date.now()}`;
+    // --- Slut på din job-logik ---
 
-        // Load API key from local storage
-        apiKeyInput.value = localStorage.getItem('scraperApiKey') || '';
-        apiKeyInput.addEventListener('change', () => localStorage.setItem('scraperApiKey', apiKeyInput.value));
+    // 2. Hvis alt går godt, send et succes-svar tilbage med det nye job-ID.
+    console.log(`Job startet succesfuldt med ID: ${jobId}`);
+    return res.status(200).json({ jobId: jobId });
 
-        // --- Main Logic ---
-        scrapeBtn.addEventListener('click', async () => {
-            const apiKey = apiKeyInput.value.trim();
-            const targetUrl = urlInput.value.trim();
-            const linkFilter = linkFilterInput.value.trim();
+  } catch (error) {
+    // 3. Hvis der opstår en fejl i try-blokken, fanges den her.
+    // Log den fulde fejl til Vercel-loggen for nemmere debugging.
+    console.error('Fejl i start-job.js:', error);
 
-            if (!apiKey || !targetUrl) {
-                showStatus('Udfyld venligst API Nøgle og Start URL.', 'error');
-                return;
-            }
-
-            resetState();
-            setLoading(true);
-            showStatus('Starter job på backend...', 'loading');
-            statusContainer.classList.remove('hidden');
-
-            try {
-                const response = await fetch(`${backendUrl}/api/start-job`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-API-KEY': apiKey },
-                    body: JSON.stringify({ url: targetUrl, filter: linkFilter })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Fejl fra backend (${response.status})`);
-                }
-
-                const { jobId } = await response.json();
-                showStatus('Job startet! Venter på behandling...', 'loading');
-                startPolling(jobId);
-
-            } catch (error) {
-                showStatus(`Fejl: ${error.message}`, 'error');
-                setLoading(false);
-            }
-        });
-
-        function startPolling(jobId) {
-            if (pollingInterval) clearInterval(pollingInterval);
-
-            pollingInterval = setInterval(async () => {
-                const apiKey = apiKeyInput.value.trim();
-                
-                try {
-                    const res = await fetch(`${backendUrl}/api/job-status?jobId=${jobId}`, {
-                        headers: { 'X-API-KEY': apiKey }
-                    });
-                    if (!res.ok) throw new Error('Kunne ikke hente jobstatus.');
-                    
-                    const job = await res.json();
-                    updateUI(job);
-
-                    if (job.status === 'COMPLETED' || job.status === 'FAILED') {
-                        clearInterval(pollingInterval);
-                        setLoading(false);
-                        if (job.status === 'COMPLETED') {
-                            displayResults(job.result);
-                        }
-                    }
-                } catch (error) {
-                    showStatus(error.message, 'error');
-                    clearInterval(pollingInterval);
-                    setLoading(false);
-                }
-            }, 3000); // Poll every 3 seconds
-        }
-
-        // --- UI Helper Functions ---
-        function updateUI(job) {
-            showStatus(`Job Status: ${job.status}. ${job.progress || ''}`, 'loading');
-            let progressPercentage = 0;
-            if (job.totalLinks > 0) {
-                progressPercentage = (job.processedLinks / job.totalLinks) * 100;
-            } else if (job.status === 'COMPLETED' || job.status === 'FAILED') {
-                progressPercentage = 100;
-            }
-            progressBar.style.width = `${progressPercentage}%`;
-            
-            if (job.status === 'FAILED') {
-                 showStatus(`Job fejlede: ${job.error || 'Ukendt fejl'}`, 'error');
-            }
-        }
-        
-        function displayResults(content) {
-            contentDisplay.textContent = content || "Intet indhold fundet.";
-            resultContainer.classList.remove('hidden');
-        }
-
-        function setLoading(isLoading) {
-            scrapeBtn.disabled = isLoading;
-            scrapeBtn.classList.toggle('is-loading', isLoading);
-        }
-
-        function showStatus(message, type = 'info') {
-            const colors = { error: 'text-red-600', success: 'text-green-600', loading: 'text-blue-600', default: 'text-gray-600' };
-            statusDiv.className = `text-center my-2 font-medium ${colors[type] || colors.default}`;
-            statusDiv.textContent = message;
-        }
-        
-        function resetState() {
-            if (pollingInterval) clearInterval(pollingInterval);
-            resultContainer.classList.add('hidden');
-            statusContainer.classList.add('hidden');
-            contentDisplay.textContent = '';
-            progressBar.style.width = '0%';
-        }
-        
-        copyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(contentDisplay.textContent);
-        });
-        
-        downloadTxtBtn.addEventListener('click', () => {
-            const blob = new Blob([contentDisplay.textContent], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'scraped_content.txt';
-            a.click();
-            URL.revokeObjectURL(url);
-        });
-    </script>
-</body>
-</html>
+    // Send et generisk, men gyldigt, JSON-fejlsvar tilbage til browseren.
+    return res.status(500).json({ 
+      error: 'Der opstod en intern serverfejl.',
+      details: error.message // Inkluder detaljer for bedre fejlfinding på klientsiden.
+    });
+  }
+}
