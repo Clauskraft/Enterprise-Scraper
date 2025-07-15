@@ -6,28 +6,60 @@ export const config = {
   runtime: 'nodejs',
 };
 
-export default async function handler(req, res) {
+// Middleware til at håndtere CORS
+const allowCors = fn => async (req, res) => {
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Tillad alle domæner
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'X-API-KEY, Content-Type');
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  return await fn(req, res);
+};
+
+async function handler(req, res) {
+  // Sikkerhed: Tjek API-nøgle
   if (req.headers['x-api-key'] !== process.env.SCRAPER_API_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  if (req.method === 'OPTIONS') { return res.status(200).end(); }
-  res.setHeader('Access-Control-Allow-Origin', '*');
 
   const { url, filter } = req.body;
-  if (!url || !filter) { return res.status(400).json({ error: 'URL and filter are required' }); }
-  try { new URL(url); } catch (e) { return res.status(400).json({ error: 'Invalid URL format' }); }
+
+  // Input-validering
+  if (!url || !filter) {
+    return res.status(400).json({ error: 'URL and filter are required' });
+  }
+  try {
+    new URL(url);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid URL format' });
+  }
 
   const jobId = randomUUID();
-  const job = { id: jobId, status: 'PENDING', url, filter, createdAt: new Date().toISOString() };
-  await kv.set(`job:${jobId}`, job, { ex: 86400 });
+  const job = {
+    id: jobId,
+    status: 'PENDING',
+    url,
+    filter,
+    createdAt: new Date().toISOString(),
+  };
 
-  const processUrl = `${process.env.VERCEL_URL}/api/process-job`;
+  await kv.set(`job:${jobId}`, job, { ex: 86400 }); // Gem job i 24 timer
+
+  // Start behandlingen asynkront uden at vente på svar
+  const processUrl = `https://${process.env.VERCEL_URL}/api/process-job`;
   fetch(processUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': process.env.SCRAPER_API_KEY },
+    headers: { 
+        'Content-Type': 'application/json',
+        'X-Internal-API-Key': process.env.SCRAPER_API_KEY // Intern nøgle
+    },
     body: JSON.stringify({ jobId }),
   });
 
   return res.status(202).json({ jobId });
 }
 
+export default allowCors(handler);
