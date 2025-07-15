@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/**/*.js",
+      "src": "package.json",
       "use": "@vercel/node"
     },
     {
@@ -11,11 +11,15 @@
     }
   ],
   "functions": {
-    "api/process-job.js": {
+    "api/**/*.js": {
       "maxDuration": 60
     }
   },
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
