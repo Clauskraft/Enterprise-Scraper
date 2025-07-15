@@ -48,8 +48,10 @@ async function handler(req, res) {
 
   await kv.set(`job:${jobId}`, job, { ex: 86400 }); // Gem job i 24 timer
 
-  // Start behandlingen asynkront uden at vente på svar
-  const processUrl = `https://${process.env.VERCEL_URL}/api/process-job`;
+  // RETTELSE: Brug den offentlige URL til at starte processen for at sikre pålidelighed.
+  const publicUrl = `https://${process.env.VERCEL_URL.includes('localhost') ? 'localhost:3000' : process.env.VERCEL_URL}`;
+  const processUrl = `${publicUrl}/api/process-job`;
+  
   fetch(processUrl, {
     method: 'POST',
     headers: { 
