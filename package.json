@@ -1,0 +1,30 @@
+{
+  "name": "enterprise-scraper",
+  "version": "1.0.0",
+  "description": "Asynchronous web scraper",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/basic-test.js",
+    "dev": "vercel dev",
+    "build": "echo \"No build step required\"",
+    "start": "vercel dev"
+  },
+  "keywords": [
+    "scraper",
+    "vercel",
+    "puppeteer",
+    "async"
+  ],
+  "author": "Claus Kraft",
+  "license": "ISC",
+  "dependencies": {
+    "@vercel/kv": "^1.0.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "@sparticuz/chromium": "^119.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

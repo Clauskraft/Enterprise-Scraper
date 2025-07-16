@@ -1,11 +1,11 @@
-// Importer Vercels Key-Value store.
+// Import Vercel's Key-Value store
 import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
-  // Sæt CORS-headers for at tillade anmodninger fra alle oprindelser.
+  // Set CORS headers to allow requests from all origins
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -16,43 +16,62 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  // Brug en try...catch-blok til at fange alle fejl.
+  // Use try...catch block to handle all errors
   try {
     const { startUrl, filter, apiKey } = req.body;
 
+    // Validate required parameters
     if (!startUrl || !filter || !apiKey) {
-      return res.status(400).json({ error: 'Mangler påkrævede parametre: startUrl, filter, eller apiKey' });
+      return res.status(400).json({ 
+        error: 'Mangler påkrævede parametre: startUrl, filter, eller apiKey' 
+      });
     }
 
-    // Generer et unikt job-ID.
-    const jobId = `job_${Date.now()}`;
+    // Validate API key
+    if (apiKey !== process.env.SCRAPER_API_KEY) {
+      return res.status(401).json({ error: 'Ugyldigt API-nøgle' });
+    }
 
-    // Opret et job-objekt, der skal gemmes i databasen.
+    // Validate URL format
+    try {
+      new URL(startUrl);
+    } catch (urlError) {
+      return res.status(400).json({ error: 'Ugyldig URL format' });
+    }
+
+    // Generate unique job ID
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create job object to store in database
     const jobData = {
       id: jobId,
-      status: 'pending', // Starter som 'afventer'
+      status: 'PENDING',
       startUrl: startUrl,
       filter: filter,
       createdAt: new Date().toISOString(),
-      results: [] // En tom liste til at gemme fundne links
+      progress: 'Job oprettet',
+      results: [],
+      totalLinks: 0,
+      processedLinks: 0
     };
 
-    // Gem det nye job i Vercel KV-databasen.
-    // Nøglen er selve job-ID'et for nem opslag.
-    await kv.set(jobId, jobData);
+    // Store new job in Vercel KV database with consistent key naming
+    await kv.set(`job:${jobId}`, jobData);
 
-    // Hvis alt går godt, send et succes-svar tilbage med det nye job-ID.
-    console.log(`Job startet og gemt i KV med ID: ${jobId}`);
+    // Trigger processing job (in a real implementation, this would be queued)
+    // For now, we'll just return the job ID
+    console.log(`Job started and stored in KV with ID: ${jobId}`);
+    
     return res.status(200).json({ jobId: jobId });
 
   } catch (error) {
-    // Hvis der opstår en fejl, fanges den her.
-    console.error('Fejl i start-job.js:', error);
+    // Handle errors gracefully
+    console.error('Error in start-job.js:', error);
 
-    // Send et specifikt, men gyldigt, JSON-fejlsvar tilbage.
+    // Send specific but valid JSON error response
     return res.status(500).json({ 
       error: 'Der opstod en intern serverfejl under oprettelse af job.',
-      details: error.message
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 }

@@ -69,29 +69,56 @@
         const resultContainer = document.getElementById('result-container');
         const apiKeyInput = document.getElementById('apiKey');
 
-        // Gem og hent API-nøgle fra localStorage
-        apiKeyInput.addEventListener('keyup', () => {
-            localStorage.setItem('scraperApiKey', apiKeyInput.value);
+        // Enhanced API key management with better security
+        apiKeyInput.addEventListener('input', () => {
+            // Only store a hash or indicator, not the actual key
+            if (apiKeyInput.value.trim()) {
+                localStorage.setItem('scraperApiKeySet', 'true');
+            } else {
+                localStorage.removeItem('scraperApiKeySet');
+            }
         });
         
         window.addEventListener('load', () => {
-            const savedApiKey = localStorage.getItem('scraperApiKey');
-            if (savedApiKey) {
-                apiKeyInput.value = savedApiKey;
+            // Don't restore actual API key for security
+            const keySet = localStorage.getItem('scraperApiKeySet');
+            if (keySet) {
+                // Just show that a key was previously entered
+                apiKeyInput.placeholder = 'API nøgle (tidligere angivet)';
             }
         });
 
+        // Enhanced form validation
+        function validateForm(data) {
+            const errors = [];
+            
+            if (!data.apiKey || data.apiKey.trim().length < 8) {
+                errors.push('API nøgle skal være mindst 8 karakterer lang');
+            }
+            
+            try {
+                new URL(data.startUrl);
+            } catch (e) {
+                errors.push('Start URL er ikke gyldigt');
+            }
+            
+            if (!data.filter || data.filter.trim().length < 1) {
+                errors.push('Filter må ikke være tom');
+            }
+            
+            return errors;
+        }
+
         form.addEventListener('submit', async (event) => {
-            // 1. Forhindrer at siden genindlæses ved tryk på knappen
             event.preventDefault();
 
-            // Nulstil tidligere resultater og vis loading state
+            // Reset previous results and show loading state
             submitButton.disabled = true;
             submitButton.classList.add('is-loading');
             submitButton.textContent = 'Starter job...';
             resultContainer.style.display = 'none';
 
-            // 2. Hent værdier fra formen
+            // Get form data
             const formData = new FormData(form);
             const data = {
                 apiKey: formData.get('apiKey'),
@@ -99,8 +126,16 @@
                 filter: formData.get('filter'),
             };
 
+            // Validate form
+            const validationErrors = validateForm(data);
+            if (validationErrors.length > 0) {
+                showResult(`Validering fejlede: ${validationErrors.join(', ')}`, 'error');
+                resetButton();
+                return;
+            }
+
             try {
-                // 3. Send data til server-funktionen
+                // Send data to server function
                 const response = await fetch('/api/start-job', {
                     method: 'POST',
                     headers: {
@@ -109,37 +144,101 @@
                     body: JSON.stringify(data),
                 });
 
-                // 4. Håndter svaret fra serveren
+                // Handle server response
                 const responseBody = await response.json();
 
                 if (response.ok) {
-                    // Succes! Vis job-ID
-                    showResult(`Succes! Job startet med ID: <strong>${responseBody.jobId}</strong>. Du kan nu tjekke status.`, 'success');
+                    // Success! Show job ID and start polling
+                    showResult(`Succes! Job startet med ID: <strong>${responseBody.jobId}</strong>`, 'success');
+                    startPolling(responseBody.jobId, data.apiKey);
                 } else {
-                    // Serveren returnerede en fejl (f.eks. 400, 500)
+                    // Server returned error
                     showResult(`Fejl fra server: ${responseBody.error || 'Ukendt fejl'}`, 'error');
                 }
 
             } catch (error) {
-                // 5. Håndter netværksfejl eller JSON-parsing fejl
-                // Dette fanger fejlen "Unexpected end of JSON input" og giver en bedre besked.
-                console.error('Fetch-fejl:', error);
-                showResult('Kritisk fejl: Kunne ikke kommunikere med serveren. Svaret var ikke gyldigt JSON. Tjek browserens konsol for detaljer.', 'error');
+                // Handle network errors or JSON parsing errors
+                console.error('Fetch error:', error);
+                showResult('Kritisk fejl: Kunne ikke kommunikere med serveren. Tjek browserens konsol for detaljer.', 'error');
             } finally {
-                // 6. Genaktiver knappen uanset hvad
-                submitButton.disabled = false;
-                submitButton.classList.remove('is-loading');
-                submitButton.textContent = 'Start Asynkront Job';
+                resetButton();
             }
         });
 
+        // Enhanced polling with better UX
+        function startPolling(jobId, apiKey) {
+            const pollInterval = 2000; // 2 seconds
+            const maxAttempts = 150; // 5 minutes max
+            let attempts = 0;
+
+            const poll = async () => {
+                attempts++;
+                
+                if (attempts > maxAttempts) {
+                    showResult('Timeout: Job tager for lang tid. Prøv igen senere.', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/api/job-status?jobId=${jobId}`, {
+                        headers: {
+                            'X-API-Key': apiKey
+                        }
+                    });
+
+                    if (response.ok) {
+                        const job = await response.json();
+                        
+                        if (job.status === 'COMPLETED') {
+                            showResult(`Job færdig! Fundet ${job.totalLinks} links. Resultatet er klar.`, 'success');
+                            // You could add a download button here
+                        } else if (job.status === 'FAILED') {
+                            showResult(`Job fejlede: ${job.error || 'Ukendt fejl'}`, 'error');
+                        } else {
+                            // Job still running, show progress
+                            const progress = job.progress || 'Behandler...';
+                            const processed = job.processedLinks || 0;
+                            const total = job.totalLinks || 0;
+                            
+                            let progressText = `Status: ${progress}`;
+                            if (total > 0) {
+                                progressText += ` (${processed}/${total})`;
+                            }
+                            
+                            showResult(progressText, 'info');
+                            setTimeout(poll, pollInterval);
+                        }
+                    } else {
+                        showResult(`Fejl ved status tjek: ${response.status}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    showResult('Fejl ved status tjek. Prøver igen...', 'warning');
+                    setTimeout(poll, pollInterval);
+                }
+            };
+
+            // Start polling
+            setTimeout(poll, pollInterval);
+        }
+
+        function resetButton() {
+            submitButton.disabled = false;
+            submitButton.classList.remove('is-loading');
+            submitButton.textContent = 'Start Asynkront Job';
+        }
+
         function showResult(message, type) {
             resultContainer.innerHTML = message;
-            if (type === 'success') {
-                resultContainer.className = 'mt-6 p-4 rounded-md bg-green-100 text-green-800';
-            } else {
-                resultContainer.className = 'mt-6 p-4 rounded-md bg-red-100 text-red-800';
-            }
+            
+            const typeClasses = {
+                success: 'mt-6 p-4 rounded-md bg-green-100 text-green-800',
+                error: 'mt-6 p-4 rounded-md bg-red-100 text-red-800',
+                warning: 'mt-6 p-4 rounded-md bg-yellow-100 text-yellow-800',
+                info: 'mt-6 p-4 rounded-md bg-blue-100 text-blue-800'
+            };
+            
+            resultContainer.className = typeClasses[type] || typeClasses.info;
             resultContainer.style.display = 'block';
         }
     </script>
