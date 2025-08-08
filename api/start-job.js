@@ -24,6 +24,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Mangler påkrævede parametre: startUrl, filter, eller apiKey' });
     }
 
+    // Sikkerhedstjek: Valider API-nøglen.
+    if (apiKey !== process.env.SCRAPER_API_KEY) {
+      return res.status(401).json({ error: 'Ugyldig API Nøgle' });
+    }
+
     // Generer et unikt job-ID.
     const jobId = `job_${Date.now()}`;
 
@@ -37,12 +42,23 @@ export default async function handler(req, res) {
       results: [] // En tom liste til at gemme fundne links
     };
 
-    // Gem det nye job i Vercel KV-databasen.
-    // Nøglen er selve job-ID'et for nem opslag.
-    await kv.set(jobId, jobData);
+    // Gem det nye job i Vercel KV-databasen med en "job:" prefix for at organisere nøgler.
+    await kv.set(`job:${jobId}`, jobData);
+
+    // Asynkron start af process-job funktionen (fire-and-forget)
+    // Vi venter ikke på svaret for at holde API'en hurtig.
+    const triggerUrl = req.headers['x-forwarded-proto'] + '://' + req.headers.host + '/api/process-job';
+    fetch(triggerUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-internal-api-key': process.env.SCRAPER_API_KEY,
+        },
+        body: JSON.stringify({ jobId: jobId }),
+    }).catch(err => console.error("Fejl ved kald til process-job:", err));
 
     // Hvis alt går godt, send et succes-svar tilbage med det nye job-ID.
-    console.log(`Job startet og gemt i KV med ID: ${jobId}`);
+    console.log(`Job startet og gemt i KV med nøgle: job:${jobId}`);
     return res.status(200).json({ jobId: jobId });
 
   } catch (error) {

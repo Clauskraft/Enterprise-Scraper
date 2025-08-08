@@ -13,7 +13,9 @@
   "author": "Claus Kraft",
   "license": "ISC",
   "dependencies": {
-    "@vercel/kv": "^1.0.1"
+    "@vercel/kv": "^1.0.1",
+    "@sparticuz/chromium": "^123.0.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }
-
